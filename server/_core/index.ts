@@ -3,6 +3,7 @@ import express from "express";
 import { createServer } from "http";
 import net from "net";
 import path from "path";
+import fs from "fs";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
 import { registerStorageProxy } from "./storageProxy";
@@ -61,6 +62,12 @@ async function startServer() {
   const publicSitesDir = path.join(process.cwd(), "public", "sites");
   app.use("/sites", express.static(publicSitesDir));
 
+  // Serve the compiled Expo Web App Console directly on /
+  const webDistDir = path.join(process.cwd(), "dist");
+  if (fs.existsSync(webDistDir)) {
+    app.use(express.static(webDistDir));
+  }
+
   registerStorageProxy(app);
   registerOAuthRoutes(app);
   registerJarvisRoutes(app);
@@ -76,6 +83,16 @@ async function startServer() {
       createContext,
     }),
   );
+
+  // Fallback to index.html for single-page client routing
+  if (fs.existsSync(webDistDir)) {
+    app.get("*", (req, res, next) => {
+      if (req.path.startsWith("/api") || req.path.startsWith("/sites")) {
+        return next();
+      }
+      res.sendFile(path.join(webDistDir, "index.html"));
+    });
+  }
 
   const preferredPort = parseInt(process.env.PORT || "3000");
   const port = await findAvailablePort(preferredPort);
