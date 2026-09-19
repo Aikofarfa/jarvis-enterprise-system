@@ -1,3 +1,36 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+html, body, #root {
+  background: #08090c !important;
+  color: #edf2f7 !important;
+}
+
+body * {
+  color: #edf2f7 !important;
+}
+
+/* NativeWind's web preset can omit extended color utilities during Metro HMR.
+   These stable selectors keep the brand readable on the web preview while the
+   same className values continue to work on iOS and Android. */
+[class*="bg-slate-950"] { background-color: #08090c !important; }
+[class*="bg-slate-900"] { background-color: #11151b !important; }
+[class*="bg-slate-800"] { background-color: #1b222b !important; }
+[class*="border-slate-800"] { border-color: #222b35 !important; }
+[class*="border-slate-700"] { border-color: #2b3642 !important; }
+[class*="text-slate-100"] { color: #edf2f7 !important; }
+[class*="text-slate-200"] { color: #d4dde5 !important; }
+[class*="text-slate-300"] { color: #b9c4ce !important; }
+[class*="text-slate-400"] { color: #9aa5b1 !important; }
+[class*="text-slate-500"] { color: #7d8997 !important; }
+[class*="text-slate-600"] { color: #53606d !important; }
+[class*="text-amber-100"] { color: #fef3c7 !important; }
+[class*="text-amber-200"] { color: #fde68a !important; }
+[class*="text-amber-300"] { color: #fcd34d !important; }
+[class*="text-emerald-300"] { color: #86efac !important; }
+[class*="text-emerald-400"] { color: #4ade80 !important; }
+[class*="text-red-300"] { color: #fca5a5 !important; }
+[class*="bg-amber-950"] { background-color: rgba(69, 26, 3, 0.2) !important; }
+[class*="bg-emerald-950"] { background-color: rgba(5, 46, 26, 0.4) !important; }
+[class*="bg-red-950"] { background-color: rgba(69, 10, 10, 0.4) !important; }
