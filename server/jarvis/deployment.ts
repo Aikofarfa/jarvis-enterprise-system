@@ -1,3 +1,5 @@
+import fs from "fs";
+import path from "path";
 import { z } from "zod";
 
 export const deployInputSchema = z.object({
@@ -28,6 +30,7 @@ export async function executeAtomicDeployment(input: DeployInput): Promise<Deplo
   const buildHash = generateBuildHash(input.code);
   const bundleSizeBytes = Buffer.byteLength(input.code, "utf8");
 
+  const siteId = `jarvis-${slug}-${buildHash.substring(0, 8)}`;
   let liveUrl = "";
 
   if (provider === "vercel" && process.env.VERCEL_TOKEN) {
@@ -51,14 +54,23 @@ export async function executeAtomicDeployment(input: DeployInput): Promise<Deplo
         }
       }
     } catch {
-      // Fall back to Manus integration
+      // Fallback
     }
   }
 
+  // Host locally on static server so ANY visitor can open and view the live website immediately
+  const publicSitesDir = path.join(process.cwd(), "public", "sites");
+  try {
+    fs.mkdirSync(publicSitesDir, { recursive: true });
+    const htmlContent = createStandaloneHtmlPage(input.code, input.brief);
+    fs.writeFileSync(path.join(publicSitesDir, `${siteId}.html`), htmlContent, "utf8");
+  } catch (err) {
+    console.error("[deployment] Failed to save local static site artifact", err);
+  }
+
   if (!liveUrl) {
-    // Default Manus.im Instant Atomic Deployment API integration
-    const manusDomain = process.env.MANUS_API_DOMAIN || "https://manus.im";
-    liveUrl = `${manusDomain}/site/jarvis-${slug}-${buildHash.substring(0, 8)}`;
+    const baseUrl = process.env.PUBLIC_URL || process.env.EXPO_PUBLIC_SERVER_URL || "http://localhost:3000";
+    liveUrl = `${baseUrl.replace(/\/$/, "")}/sites/${siteId}.html`;
   }
 
   return {
@@ -71,7 +83,7 @@ export async function executeAtomicDeployment(input: DeployInput): Promise<Deplo
     packageSummary: {
       totalFiles: 1,
       bundleSizeBytes,
-      framework: "React + Tailwind CSS (JARVIS Web Factory)",
+      framework: "React 19 + Tailwind CSS (JARVIS Web Factory)",
     },
   };
 }
@@ -91,4 +103,43 @@ function generateBuildHash(code: string): string {
     hash |= 0;
   }
   return Math.abs(hash).toString(36);
+}
+
+function createStandaloneHtmlPage(code: string, brief: string): string {
+  const cleanCode = code
+    .replace(/import\s+React.*?;/g, "")
+    .replace(/import\s+.*?;/g, "")
+    .replace(/export\s+default\s+function/g, "function App");
+
+  return `<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JARVIS Web Factory · ${escapeHtml(brief)}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body class="bg-slate-950 text-slate-100 antialiased selection:bg-cyan-500 selection:text-slate-950">
+  <div id="root"></div>
+  <script type="text/babel">
+    ${cleanCode}
+
+    if (typeof App !== 'undefined') {
+      const root = ReactDOM.createRoot(document.getElementById('root'));
+      root.render(<App />);
+    }
+  </script>
+</body>
+</html>`;
+}
+
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }

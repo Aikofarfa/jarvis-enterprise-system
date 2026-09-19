@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import fs from "fs";
+import path from "path";
 import { auditTasteSkillCode, calculateContrastRatio, parseHexColor } from "../lib/taste-skill";
 import { generateWebCodeWithHarness } from "../server/jarvis/deepseek-harness";
 import { runPlaywrightE2EAudit } from "../server/jarvis/playwright-qa";
@@ -83,17 +85,21 @@ describe("Playwright E2E QA Auditor", () => {
 });
 
 describe("Manus Atomic Deployment Engine", () => {
-  it("packages and deploys artifact returning live URL", async () => {
+  it("packages and deploys artifact returning active live URL and saving HTML file", async () => {
     const deployment = await executeAtomicDeployment({
-      code: "<main>App Live</main>",
+      code: "function App() { return <main>App Live</main>; }",
       brief: "Clínica Dental Bogotá",
       provider: "manus",
     });
 
     expect(deployment.ok).toBe(true);
     expect(deployment.status).toBe("DEPLOYED");
-    expect(deployment.deploymentUrl).toContain("manus.im");
+    expect(deployment.deploymentUrl).toContain("/sites/jarvis-");
     expect(deployment.buildHash).toBeTruthy();
+
+    const siteFilename = deployment.deploymentUrl.split("/").pop() || "";
+    const sitePath = path.join(process.cwd(), "public", "sites", siteFilename);
+    expect(fs.existsSync(sitePath)).toBe(true);
   });
 });
 
