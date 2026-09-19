@@ -1,6 +1,6 @@
 import { MaterialIcons } from "@expo/vector-icons";
 import { useState } from "react";
-import { Alert, Pressable, ScrollView, View } from "react-native";
+import { Alert, Pressable, ScrollView, TextInput, View } from "react-native";
 
 import { BrandMark, DataRow, EmptyState, GhostButton, PrimaryButton, SectionHeading, StatusBadge } from "@/components/jarvis-ui";
 import { JarvisText as Text } from "@/components/jarvis-text";
@@ -9,6 +9,7 @@ import { useJarvis } from "@/lib/jarvis-context";
 import { generateWebCodeWithHarness } from "@/server/jarvis/deepseek-harness";
 import { runPlaywrightE2EAudit, type PlaywrightAuditResult } from "@/server/jarvis/playwright-qa";
 import { executeAtomicDeployment, type DeploymentResult } from "@/server/jarvis/deployment";
+import type { BusinessProspect } from "@/server/jarvis/routes";
 
 const API_BASE = "http://localhost:3000";
 
@@ -17,12 +18,23 @@ export default function FactoryScreen() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   // Web Factory & QA State
-  const [activeTab, setActiveTab] = useState<"QUEUE" | "QA_INSPECTOR" | "GUIDELINES">("QUEUE");
+  const [activeTab, setActiveTab] = useState<"QUEUE" | "QA_INSPECTOR" | "PROSPECTOR" | "GUIDELINES">("QUEUE");
   const [isBuilding, setIsBuilding] = useState(false);
   const [selectedBrief, setSelectedBrief] = useState<string>("");
   const [, setGeneratedCode] = useState<string>("");
   const [qaResult, setQaResult] = useState<PlaywrightAuditResult | null>(null);
   const [deployResult, setDeployResult] = useState<DeploymentResult | null>(null);
+
+  // Google Maps Prospector State
+  const [prospectQuery, setProspectQuery] = useState("Odontología");
+  const [prospectCity, setProspectCity] = useState("Bogotá");
+  const [prospects, setProspects] = useState<BusinessProspect[]>([]);
+  const [isSearchingLeads, setIsSearchingLeads] = useState(false);
+  const [generatedPitch, setGeneratedPitch] = useState<{
+    businessName: string;
+    demoUrl: string;
+    salesPitchScript: string;
+  } | null>(null);
 
   const confirmDelete = (id: string) => {
     Alert.alert("Eliminar corrida", "Se quitará únicamente de este dispositivo.", [
@@ -39,7 +51,6 @@ export default function FactoryScreen() {
     setDeployResult(null);
 
     try {
-      // Try API Endpoints first to respect client-server boundary
       let codeToAudit = "";
       try {
         const genRes = await fetch(`${API_BASE}/api/web-factory/generate`, {
@@ -109,6 +120,75 @@ export default function FactoryScreen() {
     }
   };
 
+  const handleSearchProspects = async () => {
+    setIsSearchingLeads(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/prospector/search`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: prospectQuery, city: prospectCity }),
+      });
+      if (res.ok) {
+        const json = await res.json();
+        setProspects(json.data || []);
+      }
+    } catch {
+      // Offline fallback
+      setProspects([
+        {
+          id: "place-1",
+          name: `Pizzería Don Mario (${prospectQuery})`,
+          category: prospectQuery,
+          city: prospectCity,
+          address: `Calle 85 # 14-20, ${prospectCity}`,
+          phone: "+57 311 234 5678",
+          rating: 4.8,
+          hasWebsite: false,
+          status: "SIN_SITIO_WEB",
+        },
+        {
+          id: "place-2",
+          name: `Odontología San José (${prospectQuery})`,
+          category: prospectQuery,
+          city: prospectCity,
+          address: `Carrera 15 # 93-40, ${prospectCity}`,
+          phone: "+57 300 987 6543",
+          rating: 4.7,
+          hasWebsite: false,
+          status: "SIN_SITIO_WEB",
+        },
+      ]);
+    } finally {
+      setIsSearchingLeads(false);
+    }
+  };
+
+  const handleGenerateDemoPitch = async (prospect: BusinessProspect) => {
+    setIsBuilding(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/prospector/generate-pitch`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          businessName: prospect.name,
+          category: prospect.category,
+          city: prospect.city,
+          phone: prospect.phone,
+        }),
+      });
+
+      if (res.ok) {
+        const json = await res.json();
+        setGeneratedPitch(json.data);
+        Alert.alert("Demo + Pitch Generado", `Se creó el sitio demo live en Manus.im y el guion comercial para ${prospect.name}.`);
+      }
+    } catch {
+      Alert.alert("Error de Prospección", "No se pudo generar el demo del prospecto.");
+    } finally {
+      setIsBuilding(false);
+    }
+  };
+
   return (
     <ScreenContainer containerClassName="bg-slate-950" className="px-5" edges={["top", "left", "right"]}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingTop: 18, paddingBottom: 34 }}>
@@ -125,7 +205,7 @@ export default function FactoryScreen() {
             <Text className="text-[11px] uppercase tracking-[2px] text-slate-400">Producción & QA</Text>
             <Text className="mt-2 font-mono text-[27px] font-semibold text-slate-100 flex-wrap">Fábrica web</Text>
             <Text className="mt-2 text-[13px] leading-5 text-slate-400">
-              Generación TSX/Tailwind con Taste Skill, auditoría autónoma E2E Playwright CLI y despliegue atómico con Manus.im.
+              Generación TSX/Tailwind con Taste Skill, auditoría autónoma E2E Playwright CLI y prospección Google Maps para clientes sin sitio web.
             </Text>
           </View>
 
@@ -154,6 +234,17 @@ export default function FactoryScreen() {
               </Text>
             </Pressable>
             <Pressable
+              onPress={() => setActiveTab("PROSPECTOR")}
+              accessibilityRole="button"
+              className={`flex-1 min-h-[44px] items-center justify-center rounded-lg py-2.5 ${
+                activeTab === "PROSPECTOR" ? "bg-slate-800" : ""
+              }`}
+            >
+              <Text className={`font-mono text-[11px] font-semibold uppercase ${activeTab === "PROSPECTOR" ? "text-emerald-400" : "text-slate-400"}`}>
+                Google Maps
+              </Text>
+            </Pressable>
+            <Pressable
               onPress={() => setActiveTab("GUIDELINES")}
               accessibilityRole="button"
               className={`flex-1 min-h-[44px] items-center justify-center rounded-lg py-2.5 ${
@@ -177,6 +268,7 @@ export default function FactoryScreen() {
                   <DataRow label="DeepSeek Harness" value="Activo (Taste Skill)" />
                   <DataRow label="Auditoría Playwright" value="20 Puntos E2E" />
                   <DataRow label="Auto-Corrección" value="Bucle en Caliente" />
+                  <DataRow label="Prospección Google" value="Filtro Sin Web" />
                   <DataRow label="Despliegue" value="Manus.im 1-Click" />
                 </View>
               </View>
@@ -306,6 +398,91 @@ export default function FactoryScreen() {
                       </View>
                     </View>
                   ) : null}
+                </View>
+              ) : null}
+            </View>
+          )}
+
+          {activeTab === "PROSPECTOR" && (
+            <View className="gap-6">
+              <View className="rounded-2xl border border-emerald-900/60 bg-slate-900/80 p-5">
+                <View className="flex-row items-center justify-between">
+                  <View className="flex-row items-center gap-2">
+                    <MaterialIcons name="place" size={20} color="#34d399" />
+                    <Text className="font-mono text-[15px] font-semibold text-slate-100">Buscador de Clientes en Google Maps</Text>
+                  </View>
+                  <StatusBadge label="SIN SITIO WEB" tone="good" />
+                </View>
+
+                <Text className="mt-2 text-[12px] text-slate-400 leading-relaxed">
+                  Filtra negocios locales en Google Maps que NO tienen sitio web oficial para crearles una página demo live y cerrar la venta.
+                </Text>
+
+                <View className="mt-4 gap-3">
+                  <TextInput
+                    value={prospectQuery}
+                    onChangeText={setProspectQuery}
+                    placeholder="Categoría (ej: Odontología, Pizzería, Peluquería)"
+                    placeholderTextColor="#94a3b8"
+                    className="min-h-[44px] bg-slate-950 border border-slate-800 rounded-xl px-3 text-[13px] text-slate-100"
+                  />
+                  <TextInput
+                    value={prospectCity}
+                    onChangeText={setProspectCity}
+                    placeholder="Ciudad (ej: Bogotá, Medellín, Cali)"
+                    placeholderTextColor="#94a3b8"
+                    className="min-h-[44px] bg-slate-950 border border-slate-800 rounded-xl px-3 text-[13px] text-slate-100"
+                  />
+                  <PrimaryButton disabled={isSearchingLeads} onPress={handleSearchProspects} icon="search">
+                    {isSearchingLeads ? "Buscando en Google Maps…" : "Buscar Negocios sin Sitio Web"}
+                  </PrimaryButton>
+                </View>
+              </View>
+
+              {prospects.length > 0 ? (
+                <View className="gap-3">
+                  <SectionHeading eyebrow={`${prospects.length} detectados`} title="Prospectos Calificados" />
+                  {prospects.map((prospect) => (
+                    <View key={prospect.id} className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
+                      <View className="flex-row items-start justify-between gap-3">
+                        <View className="flex-1">
+                          <Text className="font-mono text-[14px] font-semibold text-slate-100">{prospect.name}</Text>
+                          <Text className="mt-1 text-[11px] text-slate-400">{prospect.address}</Text>
+                          <Text className="mt-1 text-[11px] font-mono text-emerald-400">⭐ {prospect.rating} / 5.0 · {prospect.phone}</Text>
+                        </View>
+                        <StatusBadge label={prospect.status} tone="warn" />
+                      </View>
+
+                      <View className="mt-4 border-t border-slate-800 pt-3">
+                        <GhostButton disabled={isBuilding} onPress={() => handleGenerateDemoPitch(prospect)} icon="bolt">
+                          Generar Demo Live + Pitch de Venta
+                        </GhostButton>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              ) : null}
+
+              {generatedPitch ? (
+                <View className="rounded-2xl border border-emerald-900/80 bg-emerald-950/40 p-5 gap-3">
+                  <View className="flex-row items-center gap-2">
+                    <MaterialIcons name="record-voice-over" size={20} color="#34d399" />
+                    <Text className="font-mono text-[15px] font-semibold text-emerald-200">Demo + Guion Comercial Generado</Text>
+                  </View>
+
+                  <Text className="text-[12px] text-slate-300">
+                    Cliente: <Text className="font-semibold text-slate-100">{generatedPitch.businessName}</Text>
+                  </Text>
+
+                  <View className="bg-slate-950 p-3 rounded-xl border border-emerald-900/60">
+                    <Text className="text-[10px] uppercase font-mono text-slate-400 mb-1">URL Demo Live (Manus.im):</Text>
+                    <Text className="font-mono text-[12px] text-emerald-400">{generatedPitch.demoUrl}</Text>
+                  </View>
+
+                  <View className="bg-slate-950 p-3 rounded-xl border border-slate-800">
+                    <Text className="text-[10px] uppercase font-mono text-slate-400 mb-1">Guion de Venta para WhatsApp/Llamada:</Text>
+                    <Text className="text-[12px] text-slate-200 leading-relaxed">{generatedPitch.salesPitchScript}</Text>
+                  </View>
                 </View>
               ) : null}
             </View>
